@@ -1,64 +1,29 @@
-ARG DISTRO="alpine"
-ARG DISTRO_VARIANT="3.21"
+FROM docker.io/library/python:3.12-alpine
 
-FROM docker.io/tiredofit/${DISTRO}:${DISTRO_VARIANT}-7.10.30
-LABEL maintainer="Dave Conroy (github.com/tiredofit)"
+LABEL org.opencontainers.image.source="https://github.com/knguyen298/docker-traefik-cloudflare-companion"
 
-ENV CONTAINER_ENABLE_MESSAGING=FALSE \
-    CONTAINER_ENABLE_SCHEDULING=FALSE \
-    CONTAINER_PROCESS_RUNAWAY_PROTECTOR=FALSE \
-    IMAGE_NAME="tiredofit/traefik-cloudflare-companion" \
-    IMAGE_REPO_URL="https://github.com/tiredofit/docker-traefik-cloudflare-companion/"
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    LOG_PATH=/logs \
+    LOG_FILE=tcc.log \
+    LOG_TYPE=BOTH
 
-RUN source /assets/functions/00-container && \
-    set -x && \
-    addgroup -S -g 8080 tcc && \
-    adduser -D -S -s /sbin/nologin \
-            -h /dev/null \
-            -G tcc \
-            -g "tcc" \
-            -u 8080 tcc \
-            && \
-    \
-    package update && \
-    package upgrade && \
-    package install .tcc-build-deps \
-                cargo \
-                gcc \
-                libffi-dev \
-                musl-dev \
-                openssl-dev \
-                py-pip \
-                py3-setuptools \
-                py3-wheel \
-                python3-dev \
-                && \
-    \
-    package install .tcc-run-deps \
-                docker-py \
-                py3-beautifulsoup4 \
-                py3-certifi \
-                py3-chardet \
-                py3-idna \
-                py3-openssl \
-                py3-packaging \
-                py3-requests \
-                py3-soupsieve \
-                py3-urllib3 \
-                py3-websocket-client \
-                py3-yaml \
-                python3 \
-                && \
-    \
-    pip install --break-system-packages \
-            cloudflare==4.1.* \
-            get-docker-secret \
-            requests \
-            && \
-    \
-    package remove .tcc-build-deps && \
-    package cleanup && \
-    rm -rf /root/.cache \
-           /root/.cargo
+# Unprivileged user that can be selected with `user: 8080:<docker socket gid>`.
+# The default user stays root so that the Docker socket is readable out of the box.
+RUN addgroup -S -g 8080 tcc && \
+    adduser -D -S -s /sbin/nologin -h /dev/null -G tcc -g tcc -u 8080 tcc && \
+    mkdir -p /logs && \
+    chown tcc:tcc /logs && \
+    chmod 775 /logs
 
-COPY install /
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
+    rm -f /tmp/requirements.txt
+
+COPY install/usr/sbin/cloudflare-companion /usr/sbin/cloudflare-companion
+RUN chmod 0755 /usr/sbin/cloudflare-companion
+
+VOLUME ["/logs"]
+
+CMD ["python3", "-u", "/usr/sbin/cloudflare-companion"]

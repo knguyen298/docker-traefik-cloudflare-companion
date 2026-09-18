@@ -1,0 +1,4 @@
+cloudflare==4.1.*
+docker>=7.1,<8
+get-docker-secret>=2.0,<3
+requests>=2.32,<3
